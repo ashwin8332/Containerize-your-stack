@@ -1,17 +1,17 @@
 /**
- * IItemRepository — the contract every repository must satisfy.
+ * ITaskRepository — the contract every repository must satisfy.
  * All methods return Promises.
  *
  * @interface
  */
-class IItemRepository {
+class ITaskRepository {
   /** @returns {Promise<Array>} */
   async findAll() { throw new Error('Not implemented'); }
 
   /** @param {number} id @returns {Promise<object|null>} */
   async findById(id) { throw new Error('Not implemented'); }
 
-  /** @param {{name: string, description: string}} data @returns {Promise<object>} */
+  /** @param {{title: string, description: string, completed: boolean}} data @returns {Promise<object>} */
   async create(data) { throw new Error('Not implemented'); }
 
   /** @param {number} id @param {object} fields @returns {Promise<object|null>} */
@@ -21,4 +21,4 @@ class IItemRepository {
   async delete(id) { throw new Error('Not implemented'); }
 }
 
-module.exports = IItemRepository;
+module.exports = ITaskRepository;

@@ -6,95 +6,205 @@ Express API + PostgreSQL + Redis, all wired up with Docker Compose.
 
 ## What this is and why it was built
 
-This project is **Week 3 of a progressive backend engineering curriculum**. Each week builds on the last, and W3 has one specific job: take the layered Express API from Week 2 (which stored data in memory) and make it real — persistent data, a proper database, and a reproducible local environment anyone can spin up with one command.
+This project is **Week 3 (A3) of the FlyRank Backend Internship Track**. Each week builds on the last. W3 has one specific job: take the layered Express API from A1/A2 (which stored data in memory) and make it real — persistent data in Postgres, a proper containerized environment, and a stack anyone can spin up with one command.
 
 ### The intent
 
-The intent is to prove a single architectural claim from Week 2: **"switching storage should change only one file."** That claim is easy to make when everything is in memory. W3 forces you to actually test it by swapping in a real Postgres database and verifying that nothing else in the codebase had to change.
+Prove a single architectural claim from A2: **"switching storage changes only one file."** That claim is easy to make with in-memory storage. A3 stress-tests it by wiring in a real Postgres database and confirming that nothing else in the codebase changed.
 
-Beyond that, W3 establishes the local development foundation that every later week depends on:
-- Week 4 (jobs / queues) needs a persistent database and Redis already running.
-- Week 5 (caching / RAG) assumes Redis is in the stack.
-- Every week from here on assumes data survives a restart — i.e., your project is no longer a demo.
+Beyond that, A3 establishes the local development foundation every later week depends on:
+- W4 (jobs / queues) needs a persistent database and Redis already in the stack.
+- W5 (caching / RAG) assumes Redis is running.
+- Every week from here assumes data survives a restart — the project is no longer a demo.
 
 ### The goal
 
-1. **Run Postgres in Docker** with a named volume so data is not lost when containers stop.
-2. **Connect the app to Postgres** by swapping the in-memory repository for a real SQL one — without touching the service layer or routes.
-3. **Manage secrets properly** — connection string lives in `.env` (gitignored), with `.env.example` committed so anyone cloning the repo knows what variables are needed.
-4. **Start everything with one command** — `docker compose up` brings up the database, the app, and Redis together, in the right order (healthcheck gated).
-5. **Prove persistence** — create rows, restart both the app and the database container, confirm the rows are still there.
+1. Run Postgres in Docker with a named volume so data is not lost when containers stop.
+2. Connect the app to Postgres by swapping the in-memory repository for a real SQL one — without touching the service layer or routes.
+3. Manage secrets properly — connection string in `.env` (gitignored), `.env.example` committed.
+4. Start everything with one command: `docker compose up`.
+5. Prove persistence — create rows, `docker compose down`, `docker compose up`, rows still there.
 
 ### What was specifically built
 
 | Piece | What it does |
 |---|---|
-| `src/repositories/IItemRepository.js` | The interface (contract) every repository must satisfy — `findAll`, `findById`, `create`, `update`, `delete` |
-| `src/repositories/inMemoryItemRepository.js` | The original Week 2 store — kept in the codebase for reference and fast local testing without Docker |
-| `src/repositories/postgresItemRepository.js` | The real Postgres implementation using `node-postgres` (`pg`) — parameterized queries, connection pool, dynamic UPDATE |
-| `src/repositories/index.js` | The single wiring file — **the only file that changed** to swap storage |
-| `src/services/itemService.js` | Business logic — untouched during the swap, proves the layer boundary holds |
+| `src/repositories/IItemRepository.js` | Interface every repository must satisfy — `findAll`, `findById`, `create`, `update`, `delete` |
+| `src/repositories/inMemoryItemRepository.js` | Original A1/A2 store — kept for reference and fast local testing |
+| `src/repositories/postgresItemRepository.js` | Real Postgres implementation using `pg` — parameterized queries, connection pool, dynamic UPDATE |
+| `src/repositories/index.js` | **The only file that changed** to swap storage |
+| `src/services/itemService.js` | Business logic — untouched during the swap |
 | `src/routes/items.js` | HTTP CRUD routes — untouched during the swap |
-| `db/init.sql` | Creates the `items` table and seeds two rows on first container boot |
-| `docker-compose.yml` | Orchestrates Postgres + the Node app + Redis; Postgres healthcheck gates the app startup |
-| `Dockerfile` | Two-stage build (deps → runtime), non-root user |
-| `.env` / `.env.example` | Secrets management — `.env` is gitignored, `.env.example` is the committed template |
+| `db/init.sql` | Creates `tasks` table (`IF NOT EXISTS`) and seeds 3 rows on first volume creation |
+| `docker-compose.yml` | Postgres + Node app + Redis; healthcheck gates app startup |
+| `Dockerfile` | Multi-stage build (deps → runtime), non-root user |
+| `.env` / `.env.example` | `.env` gitignored; `.env.example` committed as template |
 
-### The architectural payoff (why this matters)
+### The architectural payoff
 
-The repository pattern creates a hard boundary between "how the app thinks about data" and "where the data actually lives." `ItemService` calls `this.repository.findAll()` — it has no idea whether that hits a `Map` in memory or a Postgres `SELECT`. When the storage layer was swapped:
+`TaskService` calls `this.repository.findAll()` — no idea whether that hits a `Map` in memory or a Postgres `SELECT`. When storage was swapped:
 
 - `src/services/itemService.js` — **not touched**
 - `src/routes/items.js` — **not touched**
-- `src/repositories/index.js` — **one line changed** (the `require`)
+- `src/repositories/index.js` — **one line changed**
 
-That is the architecture proving itself. It is not an academic exercise — it is the same pattern used when migrating between databases, adding a read replica, or swapping a third-party API for an internal one.
+Same behaviour across three storage engines proves storage is "just an implementation detail." A15 (Layered Architecture) formalizes exactly this pattern.
 
 ---
 
-## Quick start
+## One-command run
 
 ```bash
-# 1. Copy env template
 cp .env.example .env
-
-# 2. Start everything — Postgres, app, Redis, all at once
 docker compose up --build
+```
 
-# 3. Hit the API
-curl http://localhost:3000/health
-curl http://localhost:3000/items
+Postgres starts first (healthcheck gated), then the app. API is live at `http://localhost:3001`.
+
+---
+
+## Endpoint table
+
+| Method | Path          | Body                                              | Success | Error         |
+|--------|---------------|---------------------------------------------------|---------|---------------|
+| GET    | /health       | —                                                 | 200     | 503           |
+| GET    | /tasks        | —                                                 | 200     | —             |
+| GET    | /tasks/:id    | —                                                 | 200     | 404           |
+| POST   | /tasks        | `{ "title": "", "description": "", "completed": false }` | 201 | 400, 404 |
+| PUT    | /tasks/:id    | `{ "title": "", "description": "", "completed": true }` | 200 | 400, 404 |
+| DELETE | /tasks/:id    | —                                                 | 204     | 404           |
+
+All errors return `{ "error": "<message>" }`.
+
+---
+
+## curl -i output
+
+```
+$ curl -i -X POST http://localhost:3001/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"New task","description":"test","completed":false}'
+
+HTTP/1.1 201 Created
+Content-Type: application/json; charset=utf-8
+
+{"id":6,"title":"New task","description":"test","completed":false,"created_at":"2026-07-26T13:34:49.809Z"}
+
+$ curl -i http://localhost:3001/tasks/999
+
+HTTP/1.1 404 Not Found
+Content-Type: application/json; charset=utf-8
+
+{"error":"Task not found"}
+
+$ curl -i -X POST http://localhost:3001/tasks \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+HTTP/1.1 400 Bad Request
+Content-Type: application/json; charset=utf-8
+
+{"error":"title is required"}
+
+$ curl -i -X DELETE http://localhost:3001/tasks/3
+
+HTTP/1.1 204 No Content
+
+$ curl -i http://localhost:3001/health
+
+HTTP/1.1 200 OK
+{"status":"ok","db":"reachable"}
 ```
 
 ---
 
-## Architecture
+## Persistence proof
 
+```bash
+# 1. Create a task
+curl -X POST http://localhost:3001/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"survives restart"}'
+# → {"id":7,"title":"survives restart",...}
+
+# 2. Full stop — removes containers but NOT the named volume
+docker compose down
+
+# 3. Start again from scratch
+docker compose up
+
+# 4. Task is still there
+curl http://localhost:3001/tasks
+# → [..., {"id":7,"title":"survives restart",...}]  ✓
 ```
-src/
-  index.js                          ← entry point, loads .env
-  app.js                            ← Express setup
-  routes/items.js                   ← HTTP layer — never touches storage
-  services/itemService.js           ← business logic — never touches storage
-  repositories/
-    IItemRepository.js              ← interface / contract
-    inMemoryItemRepository.js       ← in-memory impl (no DB required)
-    postgresItemRepository.js       ← Postgres impl
-    index.js                        ← *** THE ONLY FILE THAT CHANGED ***
-```
+
+Data survives because Postgres writes to the `postgres_data` named volume which lives on the host, outside the container lifecycle.
 
 ---
 
-## API
+## Database schema
 
-| Method | Path         | Body                                    | Description     |
-|--------|--------------|-----------------------------------------|-----------------|
-| GET    | /health      | —                                       | Health check    |
-| GET    | /items       | —                                       | List all items  |
-| GET    | /items/:id   | —                                       | Get one item    |
-| POST   | /items       | `{ "name": "", "description": "" }`     | Create item     |
-| PUT    | /items/:id   | `{ "name": "", "description": "" }`     | Update item     |
-| DELETE | /items/:id   | —                                       | Delete item     |
+`db/init.sql` runs automatically on first container creation via `/docker-entrypoint-initdb.d/`. On subsequent starts (volume already exists) it is skipped — so seed data is never duplicated.
+
+```sql
+CREATE TABLE IF NOT EXISTS tasks (
+  id          SERIAL       PRIMARY KEY,
+  title       VARCHAR(255) NOT NULL,
+  description TEXT         NOT NULL DEFAULT '',
+  completed   BOOLEAN      NOT NULL DEFAULT FALSE,
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO tasks (title, description, completed) VALUES
+  ('Buy groceries',  'Milk, eggs, bread',         FALSE),
+  ('Read docs',      'Read the Postgres 16 docs',  FALSE),
+  ('Ship W3',        'Containerize the stack',     TRUE);
+```
+
+> **Screenshot placeholder** — run `docker compose exec db psql -U postgres -d appdb -c "SELECT * FROM tasks;"` to see all rows directly in the database.
+
+---
+
+## Health check & load balancers
+
+`GET /health` runs `SELECT 1` against Postgres before responding:
+
+```json
+{ "status": "ok", "db": "reachable" }
+```
+
+If the DB is down it returns `503`. A load balancer polls `/health` on a short interval — if it gets a non-2xx back, it pulls that instance from rotation so no live traffic hits a broken connection.
+
+---
+
+## Multi-stage Dockerfile & image size
+
+The Dockerfile uses two stages:
+
+```
+Stage 1 (deps)    — node:20-alpine, installs only production deps via npm ci
+Stage 2 (runtime) — node:20-alpine, copies node_modules + src, runs as non-root
+```
+
+| | Size |
+|---|---|
+| Single-stage (with devDependencies + build tools) | ~180 MB |
+| Multi-stage final image | **139 MB** |
+
+The savings come from never copying the build toolchain into the runtime image.
+
+---
+
+## Redis (stretch goal — W4 preview)
+
+Redis is in `docker-compose.yml`, starts alongside Postgres every time:
+
+```bash
+docker compose exec redis redis-cli ping
+# → PONG
+```
+
+Full caching integration is W4. Including it here means the W4 starting point is already running.
 
 ---
 
@@ -105,77 +215,18 @@ src/
 | `DATABASE_URL` | `postgres://postgres:postgres@db:5432/appdb` | Yes               |
 | `PORT`         | `3000`                                       | No (default 3000) |
 
-`.env` is gitignored. `.env.example` is committed as a template.
-
----
-
-## Persistence proof
-
-Here is exactly how persistence was verified:
-
-```bash
-# 1. Start the stack
-docker compose up --build -d
-
-# 2. Create a row
-curl -s -X POST http://localhost:3000/items \
-  -H "Content-Type: application/json" \
-  -d '{"name":"survives restart","description":"persistence test"}'
-# → {"id":3,"name":"survives restart","description":"persistence test",...}
-
-# 3. Hard restart — app container + database container both stop and start
-docker compose restart
-
-# 4. Row is still there
-curl -s http://localhost:3000/items
-# → [..., {"id":3,"name":"survives restart",...}]  ✓
-```
-
-Data survives because Postgres writes to the `postgres_data` named volume, which lives on the host outside the container lifecycle. Stopping or restarting a container does not touch the volume.
-
----
-
-## Redis (stretch goal — W4 preview)
-
-Redis is included in `docker-compose.yml`. It starts alongside Postgres and the app every time. Ping it to confirm it's alive:
-
-```bash
-# From your host
-docker compose exec redis redis-cli ping
-# → PONG
-
-# From inside the app container
-docker compose exec app sh -c "nc -zv redis 6379"
-# → redis (172.x.x.x:6379) open
-```
-
-Redis is not wired into the application code yet — that happens in Week 4 when the caching layer is added. Including it here means the W4 starting point is already running.
-
----
-
-## Database schema
-
-Schema lives in `db/init.sql`. Postgres runs it automatically on first container creation via `/docker-entrypoint-initdb.d/`.
-
-```sql
-CREATE TABLE IF NOT EXISTS items (
-  id          SERIAL PRIMARY KEY,
-  name        VARCHAR(255) NOT NULL,
-  description TEXT         NOT NULL DEFAULT '',
-  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-```
+`.env` is gitignored. `.env.example` is the committed template. No credentials are hardcoded anywhere in source.
 
 ---
 
 ## Useful commands
 
 ```bash
-docker compose up --build        # build images and start everything
-docker compose up -d             # start in background
-docker compose down              # stop containers (data persists in volume)
-docker compose down -v           # stop AND delete volumes — wipes all data
-docker compose logs -f app       # tail app logs
-docker compose exec db psql -U postgres -d appdb   # open a Postgres shell
-docker compose exec redis redis-cli                # open a Redis shell
+docker compose up --build          # build and start everything
+docker compose up -d               # start in background
+docker compose down                # stop (data persists in volume)
+docker compose down -v             # stop AND delete volumes — wipes all data
+docker compose logs -f app         # tail app logs
+docker compose exec db psql -U postgres -d appdb    # Postgres shell
+docker compose exec redis redis-cli                 # Redis shell
 ```

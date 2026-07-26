@@ -1,12 +1,12 @@
 const { Pool } = require('pg');
-const IItemRepository = require('./IItemRepository');
+const ITaskRepository = require('./IItemRepository');
 
 /**
- * PostgresItemRepository — production repository backed by Postgres.
- * Implements the same interface as InMemoryItemRepository.
- * The service and routes are completely unaware of this swap.
+ * PostgresTaskRepository — backed by Postgres, parameterized queries only.
+ * Implements the same interface as InMemoryTaskRepository.
+ * Service and routes are completely unaware of this swap.
  */
-class PostgresItemRepository extends IItemRepository {
+class PostgresTaskRepository extends ITaskRepository {
   constructor() {
     super();
     this._pool = new Pool({
@@ -14,48 +14,47 @@ class PostgresItemRepository extends IItemRepository {
     });
   }
 
+  /** Expose pool so the health-check route can ping the DB */
+  get pool() { return this._pool; }
+
   async findAll() {
     const { rows } = await this._pool.query(
-      'SELECT * FROM items ORDER BY id ASC'
+      'SELECT * FROM tasks ORDER BY id ASC'
     );
     return rows;
   }
 
   async findById(id) {
     const { rows } = await this._pool.query(
-      'SELECT * FROM items WHERE id = $1',
+      'SELECT * FROM tasks WHERE id = $1',
       [id]
     );
     return rows[0] || null;
   }
 
-  async create({ name, description = '' }) {
+  async create({ title, description = '', completed = false }) {
     const { rows } = await this._pool.query(
-      'INSERT INTO items (name, description) VALUES ($1, $2) RETURNING *',
-      [name, description]
+      'INSERT INTO tasks (title, description, completed) VALUES ($1, $2, $3) RETURNING *',
+      [title, description, completed]
     );
     return rows[0];
   }
 
-  async update(id, { name, description }) {
-    // Build dynamic SET clause for only the provided fields
+  async update(id, { title, description, completed }) {
+    // Build a dynamic SET clause — only update fields that were actually sent
     const updates = [];
     const values = [];
     let idx = 1;
 
-    if (name !== undefined) {
-      updates.push(`name = $${idx++}`);
-      values.push(name);
-    }
-    if (description !== undefined) {
-      updates.push(`description = $${idx++}`);
-      values.push(description);
-    }
+    if (title !== undefined)       { updates.push(`title = $${idx++}`);       values.push(title); }
+    if (description !== undefined) { updates.push(`description = $${idx++}`); values.push(description); }
+    if (completed !== undefined)   { updates.push(`completed = $${idx++}`);   values.push(completed); }
+
     if (updates.length === 0) return this.findById(id);
 
-    values.push(id);
+    values.push(id); // last placeholder = WHERE id
     const { rows } = await this._pool.query(
-      `UPDATE items SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`,
+      `UPDATE tasks SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`,
       values
     );
     return rows[0] || null;
@@ -63,11 +62,11 @@ class PostgresItemRepository extends IItemRepository {
 
   async delete(id) {
     const { rowCount } = await this._pool.query(
-      'DELETE FROM items WHERE id = $1',
+      'DELETE FROM tasks WHERE id = $1',
       [id]
     );
     return rowCount > 0;
   }
 }
 
-module.exports = PostgresItemRepository;
+module.exports = PostgresTaskRepository;

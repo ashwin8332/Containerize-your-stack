@@ -1,10 +1,10 @@
-const IItemRepository = require('./IItemRepository');
+const ITaskRepository = require('./IItemRepository');
 
 /**
- * In-memory repository — kept for reference and testing.
- * Data is lost on restart (demo only).
+ * InMemoryTaskRepository — kept for reference and fast testing (no DB needed).
+ * Data is lost on restart.
  */
-class InMemoryItemRepository extends IItemRepository {
+class InMemoryTaskRepository extends ITaskRepository {
   constructor() {
     super();
     this._store = new Map();
@@ -19,18 +19,19 @@ class InMemoryItemRepository extends IItemRepository {
     return this._store.get(id) || null;
   }
 
-  async create({ name, description = '' }) {
-    const item = { id: this._nextId++, name, description, created_at: new Date() };
-    this._store.set(item.id, item);
-    return item;
+  async create({ title, description = '', completed = false }) {
+    const task = { id: this._nextId++, title, description, completed, created_at: new Date() };
+    this._store.set(task.id, task);
+    return task;
   }
 
-  async update(id, { name, description }) {
-    const item = this._store.get(id);
-    if (!item) return null;
-    if (name !== undefined) item.name = name;
-    if (description !== undefined) item.description = description;
-    return item;
+  async update(id, { title, description, completed }) {
+    const task = this._store.get(id);
+    if (!task) return null;
+    if (title !== undefined)       task.title = title;
+    if (description !== undefined) task.description = description;
+    if (completed !== undefined)   task.completed = completed;
+    return task;
   }
 
   async delete(id) {
@@ -40,4 +41,4 @@ class InMemoryItemRepository extends IItemRepository {
   }
 }
 
-module.exports = InMemoryItemRepository;
+module.exports = InMemoryTaskRepository;

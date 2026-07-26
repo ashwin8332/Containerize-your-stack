@@ -1,12 +1,9 @@
 /**
- * ItemService — pure business logic, zero knowledge of storage.
- * Depends on a repository that satisfies the IItemRepository interface.
+ * TaskService — pure business logic, zero knowledge of storage.
+ * Depends on a repository satisfying ITaskRepository.
  * Swapping storage means changing only src/repositories/index.js — this file never changes.
  */
-class ItemService {
-  /**
-   * @param {import('../repositories/IItemRepository')} repository
-   */
+class TaskService {
   constructor(repository) {
     this.repository = repository;
   }
@@ -19,8 +16,8 @@ class ItemService {
     return this.repository.findById(id);
   }
 
-  async create({ name, description = '' }) {
-    return this.repository.create({ name, description });
+  async create({ title, description = '', completed = false }) {
+    return this.repository.create({ title, description, completed });
   }
 
   async update(id, fields) {
@@ -32,4 +29,4 @@ class ItemService {
   }
 }
 
-module.exports = ItemService;
+module.exports = TaskService;

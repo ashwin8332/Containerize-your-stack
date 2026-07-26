@@ -1,59 +1,63 @@
 const express = require('express');
-const ItemService = require('../services/itemService');
+const TaskService = require('../services/itemService');
 const repository = require('../repositories');
 
 const router = express.Router();
-const service = new ItemService(repository);
+const service = new TaskService(repository);
 
-// GET /items
+// GET /tasks
 router.get('/', async (_req, res) => {
   try {
-    const items = await service.getAll();
-    res.json(items);
+    const tasks = await service.getAll();
+    res.json(tasks);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /items/:id
+// GET /tasks/:id
 router.get('/:id', async (req, res) => {
   try {
-    const item = await service.getById(Number(req.params.id));
-    if (!item) return res.status(404).json({ error: 'Not found' });
-    res.json(item);
+    const task = await service.getById(Number(req.params.id));
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    res.json(task);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /items
+// POST /tasks
 router.post('/', async (req, res) => {
   try {
-    const { name, description } = req.body;
-    if (!name) return res.status(400).json({ error: 'name is required' });
-    const item = await service.create({ name, description });
-    res.status(201).json(item);
+    const { title, description, completed } = req.body;
+    if (!title) return res.status(400).json({ error: 'title is required' });
+    const task = await service.create({ title, description, completed });
+    res.status(201).json(task);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT /items/:id
+// PUT /tasks/:id
 router.put('/:id', async (req, res) => {
   try {
-    const item = await service.update(Number(req.params.id), req.body);
-    if (!item) return res.status(404).json({ error: 'Not found' });
-    res.json(item);
+    const { title, description, completed } = req.body;
+    if (title === undefined && description === undefined && completed === undefined) {
+      return res.status(400).json({ error: 'Provide at least one field: title, description, or completed' });
+    }
+    const task = await service.update(Number(req.params.id), { title, description, completed });
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    res.json(task);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// DELETE /items/:id
+// DELETE /tasks/:id
 router.delete('/:id', async (req, res) => {
   try {
     const deleted = await service.remove(Number(req.params.id));
-    if (!deleted) return res.status(404).json({ error: 'Not found' });
+    if (!deleted) return res.status(404).json({ error: 'Task not found' });
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: err.message });
